@@ -8,7 +8,6 @@ import numpy as np
 from numpy.random import Generator
 
 from alpha.market.base import MarketState, PriceModel
-# hello
 
 class GeometricBrownianMotion(PriceModel):
     """Geometric Brownian Motion with exact log-Euler discretization.
