@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
+import pandas as pd
 from numpy.random import Generator
 
 
@@ -17,12 +18,23 @@ class MarketState:
     Designed so strategies depend on this view rather than on a concrete
     price model. Multi-asset extensions can widen ``price`` to a mapping
     or array without changing the strategy contract shape.
+
+    For historical OHLCV replay, optional bar fields are populated; synthetic
+    models leave them ``None``. Strategies should use ``price`` (the configured
+    mark field) unless execution timing requires ``open``.
     """
 
     step: int
     timestamp: float
     price: float
     asset_id: str = "ASSET"
+    open: Optional[float] = None
+    high: Optional[float] = None
+    low: Optional[float] = None
+    close: Optional[float] = None
+    volume: Optional[float] = None
+    adjusted_close: Optional[float] = None
+    bar_timestamp: Optional[pd.Timestamp] = None
 
 
 class PriceModel(ABC):

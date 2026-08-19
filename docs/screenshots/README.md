@@ -1,5 +1,3 @@
-Place a dashboard screenshot at `dashboard.png` in this folder.
+Dashboard capture used in the README (`dashboard.png`).
 
-Capture it after:
-
-    streamlit run app.py
+Regenerate after `streamlit run app.py` loads the default demo (GBM, 252 steps, 10/30 MA crossover).

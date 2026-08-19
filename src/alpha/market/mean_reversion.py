@@ -25,6 +25,15 @@ class OrnsteinUhlenbeck(PriceModel):
     When θ = 0 the process reduces to arithmetic Brownian motion::
 
         X_{t+Δt} = X_t + σ √Δt Z
+
+    Units
+    -----
+    ``theta`` has units of 1/time (the same time unit as ``1 / dt``).
+    ``sigma`` is the *level* diffusion coefficient of X, **not** a
+    return volatility. With ``dt = 1/252``, θ is per year and σ is per
+    √year in the same units as X. Unlike GBM, X can become non-positive;
+    the trading portfolio requires a positive mark, so GBM is the safer
+    choice for a price-like asset.
     """
 
     def __init__(

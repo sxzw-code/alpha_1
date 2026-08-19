@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "alpha"
 version = "0.1.0"
-description = "Real-time trading simulation engine for evaluating algorithmic strategies under stochastic price models."
+description = "Research simulator for algorithmic trading strategies on stochastic price paths (GBM, mean reversion)."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
@@ -13,14 +13,19 @@ authors = [{ name = "Alpha" }]
 dependencies = [
     "numpy>=1.26",
     "pandas>=2.1",
-    "streamlit>=1.39",
+    "streamlit>=1.49",
     "plotly>=5.20",
+    "pyarrow>=14.0",
 ]
 
 [project.optional-dependencies]
+historical = [
+    "yfinance>=0.2",
+]
 dev = [
     "pytest>=7.4",
     "scipy>=1.11",
+    "yfinance>=0.2",
 ]
 
 [tool.setuptools.packages.find]

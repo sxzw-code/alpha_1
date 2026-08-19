@@ -20,6 +20,13 @@ class GeometricBrownianMotion(PriceModel):
     Exact discrete solution over Δt::
 
         S_{t+Δt} = S_t * exp[(μ - ½σ²)Δt + σ√Δt Z],  Z ~ N(0, 1)
+
+    Units
+    -----
+    ``mu`` and ``sigma`` must be expressed in the **same time unit as**
+    ``1 / dt``. With the dashboard default ``dt = 1/252``, both are
+    *annualized* (per year). Passing daily μ with annual dt (or the
+    reverse) silently produces the wrong distribution.
     """
 
     def __init__(

@@ -33,7 +33,7 @@ def test_known_drawdown() -> None:
 
 
 def test_sharpe_matches_closed_form() -> None:
-    # Four 1% / -1% oscillations starting at 100.
+    # Four 1% / -1% oscillations starting at 100. Mean excess return is 0.
     r = np.array([0.01, -0.01, 0.01, -0.01])
     equity = 100.0 * np.cumprod(np.concatenate([[1.0], 1.0 + r]))
     ppy = 252.0
@@ -42,10 +42,26 @@ def test_sharpe_matches_closed_form() -> None:
     n = 4
     cagr = (1.0 + total) ** (ppy / n) - 1.0
     ann_vol = float(np.std(r, ddof=1)) * np.sqrt(ppy)
+    sharpe = np.sqrt(ppy) * float(np.mean(r)) / float(np.std(r, ddof=1))
     assert metrics.total_return == pytest.approx(total)
     assert metrics.annualized_return == pytest.approx(cagr)
     assert metrics.annualized_volatility == pytest.approx(ann_vol)
-    assert metrics.sharpe_ratio == pytest.approx(cagr / ann_vol)
+    assert metrics.sharpe_ratio == pytest.approx(sharpe)
+    assert metrics.sharpe_ratio == pytest.approx(0.0)
+
+
+def test_sharpe_uses_arithmetic_mean_not_cagr() -> None:
+    r = np.array([0.05, 0.02, -0.01, 0.03])
+    equity = 100.0 * np.cumprod(np.concatenate([[1.0], 1.0 + r]))
+    ppy = 252.0
+    metrics = analyze(equity, periods_per_year=ppy)
+    expected = np.sqrt(ppy) * float(np.mean(r)) / float(np.std(r, ddof=1))
+    assert metrics.sharpe_ratio == pytest.approx(expected)
+    cagr = (equity[-1] / equity[0]) ** (ppy / 4) - 1.0
+    assert metrics.annualized_return == pytest.approx(cagr)
+    assert metrics.sharpe_ratio != pytest.approx(
+        cagr / metrics.annualized_volatility, rel=1e-9
+    )
 
 
 def test_zero_volatility_flat_equity() -> None:

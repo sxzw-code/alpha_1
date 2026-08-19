@@ -21,6 +21,12 @@ class TradeRecord:
     execution_price: float
     commission: float
     slippage: float
+    spread_cost: float
+    fixed_slippage_cost: float
+    market_impact_cost: float
+    market_impact_bps: float
+    participation_rate: float
+    average_daily_volume: float
     total_transaction_cost: float
     asset_id: str
     realized_pnl: float
@@ -143,23 +149,34 @@ class Portfolio:
         return self.equity(price) / self._initial_capital - 1.0
 
     def mark_to_market(
-        self, price: float, *, step: int = 0, timestamp: float = 0.0
+        self,
+        price: float,
+        *,
+        step: int = 0,
+        timestamp: float = 0.0,
+        record: bool = True,
     ) -> PortfolioSnapshot:
-        """Update last price, append equity history, and return a snapshot."""
+        """Mark inventory at ``price`` and optionally append equity history.
+
+        ``record=False`` skips the portfolio-level history list (Monte Carlo
+        already stores equity on the engine). Cash and positions still update
+        via fills; this only avoids duplicate history writes.
+        """
         if price <= 0.0:
             raise ValueError(f"price must be positive, got {price}")
         self._last_price = float(price)
         snap = self.snapshot(price, step=step, timestamp=timestamp)
-        self._equity_history.append(
-            EquityPoint(
-                step=step,
-                timestamp=timestamp,
-                equity=snap.equity,
-                price=price,
-                cash=snap.cash,
-                quantity=snap.quantity,
+        if record:
+            self._equity_history.append(
+                EquityPoint(
+                    step=step,
+                    timestamp=timestamp,
+                    equity=snap.equity,
+                    price=price,
+                    cash=snap.cash,
+                    quantity=snap.quantity,
+                )
             )
-        )
         return snap
 
     def snapshot(
@@ -235,6 +252,14 @@ class Portfolio:
             commission=fill.commission,
             slippage=fill.slippage,
             total_transaction_cost=fill.total_transaction_cost,
+            spread_cost=fill.spread_cost,
+            fixed_slippage_cost=fill.fixed_slippage_cost,
+            market_impact_cost=fill.market_impact_cost,
+            market_impact_bps=fill.market_impact_bps,
+            participation_rate=fill.participation_rate,
+            average_daily_volume=fill.average_daily_volume,
+            price_after_spread=fill.price_after_spread,
+            price_after_slippage=fill.price_after_slippage,
             realized_pnl=net_realized,
             timestamp=fill.timestamp,
             step=fill.step,
@@ -249,6 +274,12 @@ class Portfolio:
                 execution_price=fill.execution_price,
                 commission=fill.commission,
                 slippage=fill.slippage,
+                spread_cost=fill.spread_cost,
+                fixed_slippage_cost=fill.fixed_slippage_cost,
+                market_impact_cost=fill.market_impact_cost,
+                market_impact_bps=fill.market_impact_bps,
+                participation_rate=fill.participation_rate,
+                average_daily_volume=fill.average_daily_volume,
                 total_transaction_cost=fill.total_transaction_cost,
                 asset_id=order.asset_id,
                 realized_pnl=net_realized,

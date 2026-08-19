@@ -25,6 +25,7 @@ from alpha.dashboard.formatting import fmt_money, fmt_pct, fmt_sharpe, rolling_m
 
 def _cfg(**overrides: object) -> DashboardConfig:
     base = dict(
+        market_source="Synthetic",
         model_name="Geometric Brownian Motion",
         s0=100.0,
         mu=0.08,
@@ -48,6 +49,10 @@ def _cfg(**overrides: object) -> DashboardConfig:
         slippage_bps=2.0,
         spread_bps=1.0,
         compare_friction=False,
+        market_impact_enabled=False,
+        impact_coefficient=0.10,
+        average_daily_volume=1_000_000.0,
+        manual_annual_volatility=None,
     )
     base.update(overrides)
     return DashboardConfig(**base)  # type: ignore[arg-type]

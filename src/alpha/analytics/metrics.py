@@ -25,15 +25,20 @@ Undefined (NaN) when ``E_T <= 0``.
 With fewer than two returns the sample standard deviation is undefined;
 this module treats that as zero volatility.
 
-**Sharpe ratio**
+**Sharpe ratio** (standard, excess period returns)::
 
-    (CAGR - r_f) / σ_ann
+    r_f^{period} = r_f / P
+    Sharpe = sqrt(P) * mean(r_t - r_f^{period}) / std(r_t, ddof=1)
 
-When ``σ_ann = 0``:
+This uses the **arithmetic** mean of simple period returns, not CAGR,
+so the numerator is consistent with the volatility estimator. ``r_f`` is
+an annual rate in the same time unit as ``P`` (default 252).
 
-- excess return ≈ 0 → Sharpe = 0
-- excess return > 0 → +∞
-- excess return < 0 → −∞
+When ``std(r_t) = 0``:
+
+- excess mean ≈ 0 → Sharpe = 0
+- excess mean > 0 → +∞
+- excess mean < 0 → −∞
 
 **Drawdown**
 
@@ -173,15 +178,38 @@ def _cagr(total_return: float, n_periods: int, periods_per_year: float) -> float
     return float(wealth ** (periods_per_year / n_periods) - 1.0)
 
 
-def _sharpe(ann_return: float, ann_vol: float, risk_free_rate: float) -> float:
-    if not np.isfinite(ann_return) or not np.isfinite(ann_vol):
+def _ratio(numer: float, denom: float) -> float:
+    """Sharpe-style ratio with a safe zero-vol convention."""
+    if not np.isfinite(numer) or not np.isfinite(denom):
         return float("nan")
-    excess = ann_return - risk_free_rate
-    if ann_vol <= _ZERO_VOL:
-        if abs(excess) <= _ZERO_VOL:
+    if denom <= _ZERO_VOL:
+        if abs(numer) <= _ZERO_VOL:
             return 0.0
-        return float("inf") if excess > 0.0 else float("-inf")
-    return float(excess / ann_vol)
+        return float("inf") if numer > 0.0 else float("-inf")
+    return float(numer / denom)
+
+
+def _sharpe_from_returns(
+    rets: np.ndarray,
+    *,
+    periods_per_year: float,
+    risk_free_rate: float,
+) -> tuple[float, float]:
+    """Return ``(annualized_volatility, sharpe)`` from 1-d period returns.
+
+    Sharpe = sqrt(P) * mean(r - r_f/P) / std(r, ddof=1)
+    """
+    n = int(np.asarray(rets).size)
+    if n == 0:
+        return 0.0, 0.0
+    rf_period = risk_free_rate / periods_per_year
+    excess = np.asarray(rets, dtype=float) - rf_period
+    if n < 2:
+        ann_vol = 0.0
+        return ann_vol, _ratio(float(np.mean(excess)) * periods_per_year, ann_vol)
+    ann_vol = float(np.std(rets, ddof=1)) * float(np.sqrt(periods_per_year))
+    ann_excess = float(np.mean(excess)) * periods_per_year
+    return ann_vol, _ratio(ann_excess, ann_vol)
 
 
 def _round_trip_pnls(fills: Sequence[Fill]) -> np.ndarray:
@@ -229,11 +257,9 @@ def analyze_equity(
     rets = period_returns(eq)
     n = int(rets.size)
     ann_ret = _cagr(total_return, n, periods_per_year)
-    if n < 2:
-        ann_vol = 0.0
-    else:
-        ann_vol = float(np.std(rets, ddof=1)) * float(np.sqrt(periods_per_year))
-    sharpe = _sharpe(ann_ret, ann_vol, risk_free_rate)
+    ann_vol, sharpe = _sharpe_from_returns(
+        rets, periods_per_year=periods_per_year, risk_free_rate=risk_free_rate
+    )
     return total_return, ann_ret, ann_vol, sharpe, analyze_drawdown(eq)
 
 
@@ -352,26 +378,32 @@ def stacked_equity_metrics(
     if n <= 0:
         ann_ret = np.zeros(n_paths, dtype=float)
         ann_vol = np.zeros(n_paths, dtype=float)
+        sharpe = np.zeros(n_paths, dtype=float)
     else:
         wealth = 1.0 + total_return
         with np.errstate(invalid="ignore", divide="ignore"):
             ann_ret = np.where(wealth > 0.0, wealth ** (periods_per_year / n) - 1.0, np.nan)
+        prev = eq[:, :-1]
+        rets = eq[:, 1:] / prev - 1.0
+        rf_period = risk_free_rate / periods_per_year
+        excess = rets - rf_period
         if n < 2:
             ann_vol = np.zeros(n_paths, dtype=float)
+            ann_excess = np.mean(excess, axis=1) * periods_per_year
+            sharpe = np.array(
+                [_ratio(float(a), 0.0) for a in ann_excess], dtype=float
+            )
         else:
-            prev = eq[:, :-1]
-            rets = eq[:, 1:] / prev - 1.0
             ann_vol = np.std(rets, axis=1, ddof=1) * np.sqrt(periods_per_year)
-
-    excess = ann_ret - risk_free_rate
-    sharpe = np.empty(n_paths, dtype=float)
-    zero_vol = ann_vol <= _ZERO_VOL
-    sharpe[~zero_vol] = excess[~zero_vol] / ann_vol[~zero_vol]
-    near_zero_excess = np.abs(excess) <= _ZERO_VOL
-    sharpe[zero_vol & near_zero_excess] = 0.0
-    sharpe[zero_vol & ~near_zero_excess & (excess > 0.0)] = np.inf
-    sharpe[zero_vol & ~near_zero_excess & (excess < 0.0)] = -np.inf
-    sharpe[~np.isfinite(ann_ret)] = np.nan
+            ann_excess = np.mean(excess, axis=1) * periods_per_year
+            zero_vol = ann_vol <= _ZERO_VOL
+            sharpe = np.empty(n_paths, dtype=float)
+            sharpe[~zero_vol] = ann_excess[~zero_vol] / ann_vol[~zero_vol]
+            near_zero = np.abs(ann_excess) <= _ZERO_VOL
+            sharpe[zero_vol & near_zero] = 0.0
+            sharpe[zero_vol & ~near_zero & (ann_excess > 0.0)] = np.inf
+            sharpe[zero_vol & ~near_zero & (ann_excess < 0.0)] = -np.inf
+        sharpe = np.where(np.isnan(ann_ret), np.nan, sharpe)
 
     dd = drawdown_series(eq)
     mdd = np.nanmin(dd, axis=1)
@@ -385,3 +417,63 @@ def stacked_equity_metrics(
         "sharpe_ratio": sharpe,
         "max_drawdown": mdd,
     }
+
+
+@dataclass(frozen=True, slots=True)
+class TransactionCostBreakdown:
+    """Decomposed execution costs across fills.
+
+    Implicit costs (spread, fixed slippage, market impact) are already
+    reflected in execution prices; they are reported here for TCA only.
+    Commission is an explicit cash fee.
+    """
+
+    commission: float
+    spread_cost: float
+    fixed_slippage_cost: float
+    market_impact_cost: float
+    total_implicit: float
+    total: float
+
+
+def decompose_transaction_costs(fills: Sequence[Fill]) -> TransactionCostBreakdown:
+    """Sum commission and implicit execution costs from fills.
+
+    Verifies ``total == commission + spread + fixed_slippage + market_impact``
+    for each fill's stored components (within floating tolerance).
+    """
+    commission = 0.0
+    spread = 0.0
+    fixed_slip = 0.0
+    impact = 0.0
+    for fill in fills:
+        sc = float(fill.spread_cost)
+        fc = float(fill.fixed_slippage_cost)
+        ic = float(fill.market_impact_cost)
+        commission += float(fill.commission)
+        spread += sc
+        fixed_slip += fc
+        impact += ic
+        expected_implicit = sc + fc + ic
+        if abs(float(fill.slippage) - expected_implicit) > 1e-9 * max(1.0, expected_implicit):
+            raise ValueError(
+                "Fill slippage field does not match component sum; "
+                f"slippage={fill.slippage}, components={expected_implicit}"
+            )
+        expected_total = float(fill.commission) + expected_implicit
+        if abs(float(fill.total_transaction_cost) - expected_total) > 1e-9 * max(
+            1.0, expected_total
+        ):
+            raise ValueError(
+                "Fill total_transaction_cost does not match decomposition; "
+                f"total={fill.total_transaction_cost}, expected={expected_total}"
+            )
+    total_implicit = spread + fixed_slip + impact
+    return TransactionCostBreakdown(
+        commission=float(commission),
+        spread_cost=float(spread),
+        fixed_slippage_cost=float(fixed_slip),
+        market_impact_cost=float(impact),
+        total_implicit=float(total_implicit),
+        total=float(commission + total_implicit),
+    )

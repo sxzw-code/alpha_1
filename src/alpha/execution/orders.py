@@ -101,8 +101,17 @@ class Fill:
 
     ``execution_price`` is the price used for inventory / cash notional.
     ``market_price`` is the observed mid / model price before frictions.
-    ``realized_pnl`` is filled in by the portfolio when the fill is applied
-    (trade P&L after commissions).
+
+    Implicit execution costs (spread, fixed slippage, market impact) are
+    **already embedded in** ``execution_price`` and are not deducted from
+    cash a second time. ``commission`` is a separate explicit cash fee.
+
+    ``slippage`` stores the **total** implicit execution cost
+    (spread + fixed slippage + market impact) for backward compatibility.
+    Component fields ``spread_cost``, ``fixed_slippage_cost``, and
+    ``market_impact_cost`` provide an auditable decomposition.
+
+    ``realized_pnl`` is filled in by the portfolio when the fill is applied.
     """
 
     order: Order
@@ -112,6 +121,14 @@ class Fill:
     commission: float = 0.0
     slippage: float = 0.0
     total_transaction_cost: float = 0.0
+    spread_cost: float = 0.0
+    fixed_slippage_cost: float = 0.0
+    market_impact_cost: float = 0.0
+    market_impact_bps: float = 0.0
+    participation_rate: float = 0.0
+    average_daily_volume: float = 0.0
+    price_after_spread: float = 0.0
+    price_after_slippage: float = 0.0
     realized_pnl: float = 0.0
     timestamp: float = 0.0
     step: int = 0

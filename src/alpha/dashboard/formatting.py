@@ -42,6 +42,27 @@ def fmt_int(value: float) -> str:
     return f"{int(round(value)):,}"
 
 
+def fmt_signed_pct(value: float, *, digits: int = 2) -> str:
+    if value is None or not np.isfinite(value):
+        return "n/a"
+    sign = "+" if value > 0 else ""
+    return f"{sign}{value:.{digits}%}"
+
+
+def fmt_signed_money(value: float) -> str:
+    if value is None or not np.isfinite(value):
+        return "n/a"
+    sign = "+" if value > 0 else "-" if value < 0 else ""
+    return f"{sign}${abs(value):,.2f}"
+
+
+def fmt_signed_num(value: float, *, digits: int = 2) -> str:
+    if value is None or not np.isfinite(value):
+        return "n/a"
+    sign = "+" if value > 0 else ""
+    return f"{sign}{value:.{digits}f}"
+
+
 def rolling_mean(values: np.ndarray, window: int) -> np.ndarray:
     x = np.asarray(values, dtype=float)
     out = np.full(x.shape, np.nan, dtype=float)
@@ -80,9 +101,49 @@ def trades_frame(result: SimulationResult) -> pd.DataFrame:
                 "quantity",
                 "market_price",
                 "execution_price",
+                "spread_cost",
+                "fixed_slippage_cost",
+                "market_impact_cost",
+                "market_impact_bps",
+                "participation_rate",
+                "average_daily_volume",
                 "slippage",
                 "commission",
                 "realized_pnl",
+            ]
+        )
+    return pd.DataFrame(rows)
+
+
+def impact_trades_frame(result: SimulationResult) -> pd.DataFrame:
+    """Trade blotter focused on market-impact audit fields."""
+    rows = []
+    for fill in result.trades:
+        rows.append(
+            {
+                "step": fill.step,
+                "side": fill.side.value,
+                "quantity": fill.fill_quantity,
+                "market_price": fill.market_price,
+                "average_daily_volume": fill.average_daily_volume,
+                "participation_rate": fill.participation_rate,
+                "market_impact_bps": fill.market_impact_bps,
+                "market_impact_cost": fill.market_impact_cost,
+                "execution_price": fill.execution_price,
+            }
+        )
+    if not rows:
+        return pd.DataFrame(
+            columns=[
+                "step",
+                "side",
+                "quantity",
+                "market_price",
+                "average_daily_volume",
+                "participation_rate",
+                "market_impact_bps",
+                "market_impact_cost",
+                "execution_price",
             ]
         )
     return pd.DataFrame(rows)
@@ -96,6 +157,12 @@ def _fill_row(fill: Fill) -> dict[str, object]:
         "quantity": fill.fill_quantity,
         "market_price": fill.market_price,
         "execution_price": fill.execution_price,
+        "spread_cost": fill.spread_cost,
+        "fixed_slippage_cost": fill.fixed_slippage_cost,
+        "market_impact_cost": fill.market_impact_cost,
+        "market_impact_bps": fill.market_impact_bps,
+        "participation_rate": fill.participation_rate,
+        "average_daily_volume": fill.average_daily_volume,
         "slippage": fill.slippage,
         "commission": fill.commission,
         "realized_pnl": fill.realized_pnl,

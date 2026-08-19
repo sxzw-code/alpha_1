@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from alpha.execution.orders import OrderSide
 from alpha.market.base import MarketState
 from alpha.portfolio.portfolio import PortfolioSnapshot
@@ -172,3 +174,47 @@ def test_mean_reversion_exits_near_mean() -> None:
             position = 0.0
     assert signals[-2].side is OrderSide.BUY
     assert signals[-1].side is OrderSide.SELL
+
+
+def _collect_signals(factory, prices: list[float]):
+    strat = factory()
+    return [
+        strat.generate_signal(_state(i, px), _flat_portfolio(px, i))
+        for i, px in enumerate(prices, start=1)
+    ]
+
+
+def test_ma_future_prices_cannot_change_past_signals() -> None:
+    prefix = [10.0, 11.0, 10.5, 12.0, 13.0, 12.5, 14.0]
+    factory = lambda: MovingAverageCrossover(2, 4, trade_quantity=1.0)
+    up = _collect_signals(factory, prefix + [50.0, 80.0])
+    down = _collect_signals(factory, prefix + [1.0, 0.5])
+    for a, b in zip(up[: len(prefix)], down[: len(prefix)], strict=True):
+        assert a.side is b.side
+        assert a.quantity == b.quantity
+
+
+def test_mean_reversion_future_prices_cannot_change_past_signals() -> None:
+    prefix = [100.0, 101.0, 99.0, 100.0, 98.0, 90.0, 91.0]
+    factory = lambda: MeanReversionStrategy(5, 2.0, entry_z=1.5, exit_z=0.25)
+    up = _collect_signals(factory, prefix + [400.0, 500.0])
+    down = _collect_signals(factory, prefix + [10.0, 5.0])
+    for a, b in zip(up[: len(prefix)], down[: len(prefix)], strict=True):
+        assert a.side is b.side
+        assert a.quantity == b.quantity
+
+
+def test_mean_reversion_holds_during_warmup() -> None:
+    strat = MeanReversionStrategy(lookback=5, trade_quantity=1.0)
+    for i, px in enumerate([100.0, 101.0, 99.0, 102.0], start=1):
+        sig = strat.generate_signal(_state(i, px), _flat_portfolio(px, i))
+        assert sig.side is OrderSide.HOLD
+        assert sig.reason == "zscore_warmup"
+
+
+def test_invalid_strategy_parameters() -> None:
+    with pytest.raises(ValueError):
+        MovingAverageCrossover(10, 10, 1.0)
+    with pytest.raises(ValueError):
+        MeanReversionStrategy(lookback=5, trade_quantity=1.0, entry_z=0.5, exit_z=1.0)
+
